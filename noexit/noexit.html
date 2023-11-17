@@ -1,0 +1,12 @@
+<h1 id="home">This page has a popup for stopping external closing.                          			
+If the page is attempted to be closed from another source then cancel.                          			
+If you are trying to leave yourself then press leave.</h1>
+ 
+<script>
+// Warning before leaving the page (back button, or outgoinglink)
+window.onbeforeunload = function() {
+   return "External close or user page change. Press leave if page change, cancel if external close";
+   //if we return nothing here (just calling return;) then there will be no pop-up question at all
+   //return;
+};
+</script>
