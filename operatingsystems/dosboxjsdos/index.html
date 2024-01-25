@@ -28,7 +28,9 @@
     Dos(document.getElementById("jsdos"), {
       wdosboxUrl: "wdosbox.js",
       cycles: 750,
-     });
+    }).ready((fs, main) => {
+        main()
+    });
   </script>
 </body>
 
