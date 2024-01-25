@@ -28,17 +28,7 @@
     Dos(document.getElementById("jsdos"), {
       wdosboxUrl: "wdosbox.js",
       cycles: 750,
-    }).ready(function (fs, main) {
-      fs.extract("test/digger.zip").then(function () {
-        main(["-c", "DIGGER.COM"]).then(function (ci) {
-          window.Module = ci.dos;
-          window.ci = ci;
-
-          DosController.Qwerty(ci.getParentDiv(), ci.getKeyEventConsumer());
-          DosController.Move(ci.getParentDiv(), ci.getKeyEventConsumer());
-        });
-      });
-    });
+     });
   </script>
 </body>
 
