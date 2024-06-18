@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raw Disk Image Creator V2</title>
+<style>
+    body {
+        background-color: black;
+        color: wheat;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        font-family: Consolas, sans-serif;
+    }
+    .container {
+        text-align: center;
+        background-color: #0F0F0F
+    }
+    button {
+        margin: 5px;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <h2>Raw Disk Image Creator V2</h2>
+    <br><hr>
+    <t>Change file size</t>
+    <br>
+    <t style="color: rgb(112, 101, 81);">in bytes</t>
+    <br><br>
+    <input type="number" id="fileSize" value="8388608" min="1" step="1" oninput="updateSizeFromInput()">
+    <br>
+    <button onclick="multiplyBy(2)">Multiply by 2</button>
+    <button onclick="divideBy(2)">Divide by 2</button>
+    <br><hr>
+    <t>File size info</t>
+    <br><br>
+    <span id="sizeInfo">(8388608 bytes | 8192.00 KB | 8.00 MB | 0.01 GB)</span>
+    <br><hr>
+    <t>File extension and creation</t>
+    <br><br>
+    <input type="radio" id="imgExt" name="fileExt" value="img" checked>
+    <label for="imgExt">.img (default)</label>
+    <input type="radio" id="rawExt" name="fileExt" value="raw">
+    <label for="rawExt">.raw</label>
+    <input type="radio" id="imaExt" name="fileExt" value="ima">
+    <label for="imaExt">.ima</label>
+    <br>
+    <t style="color: rgb(112, 101, 81);">Any of these file extensions won't change disk.</t>
+    <br><br>
+    <button onclick="createNulFile()">Create File</button>
+</div>
+<script>
+function createNulBlob(size) {
+    const nulChar = '\0';
+    const nulString = nulChar.repeat(size);
+    return new Blob([nulString], { type: 'application/octet-stream' });
+}
+function downloadFile(blob, filename) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+}
+function createNulFile() {
+    const fileSizeInBytes = parseInt(document.getElementById('fileSize').value, 10);
+    if (!isNaN(fileSizeInBytes) && fileSizeInBytes > 0) {
+        const fileExt = document.querySelector('input[name="fileExt"]:checked').value;
+        const blob = createNulBlob(fileSizeInBytes);
+        const filename = `output_${fileSizeInBytes}.${fileExt}`;
+        downloadFile(blob, filename);
+        updateSizeInfo(fileSizeInBytes);
+    } else {
+        alert('Put in a valid file size');
+    }
+}
+function multiplyBy(factor) {
+    const currentSize = parseInt(document.getElementById('fileSize').value, 10);
+    if (!isNaN(currentSize) && currentSize > 0) {
+        const newSize = currentSize * factor;
+        document.getElementById('fileSize').value = newSize;
+        updateSizeInfo(newSize);
+    } else {
+        alert('Put in a valid file size');
+    }
+}
+function divideBy(factor) {
+    const currentSize = parseInt(document.getElementById('fileSize').value, 10);
+    if (!isNaN(currentSize) && currentSize > 0 && currentSize >= factor) {
+        const newSize = currentSize / factor;
+        document.getElementById('fileSize').value = newSize;
+        updateSizeInfo(newSize);
+    } else {
+        alert('Put in a valid file size');
+    }
+}
+function updateSizeInfo(bytes) {
+    const kb = bytes / 1024;
+    const mb = bytes / 1048576;
+    const gb = bytes / 1073741824;
+    document.getElementById('sizeInfo').innerHTML = `(${bytes} bytes | ${kb.toFixed(2)} KB | ${mb.toFixed(2)} MB | ${gb.toFixed(2)} GB)`;
+}
+function updateSizeFromInput() {
+    const fileSizeInBytes = parseInt(document.getElementById('fileSize').value, 10);
+    if (!isNaN(fileSizeInBytes) && fileSizeInBytes > 0) {
+        updateSizeInfo(fileSizeInBytes);
+    } else {
+        document.getElementById('sizeInfo').innerHTML = '';
+    }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>create .img file</title>
+</head>
+<body>
+<h2>create raw disk image file</h2>
+<label for="fileSize">file size in bytes:</label>
+<input type="number" id="fileSize" value="8388608" min="1" step="1">
+<button onclick="createNulFile()">create file</button>
+<script>
+function createNulBlob(size) {
+    const nulChar = '\0';
+    const nulString = nulChar.repeat(size);
+    return new Blob([nulString], { type: 'application/octet-stream' });
+}
+function downloadFile(blob, filename) {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    link.click();
+}
+function createNulFile() {
+    const fileSizeInBytes = parseInt(document.getElementById('fileSize').value, 10);
+    if (!isNaN(fileSizeInBytes) && fileSizeInBytes > 0) {
+        const blob = createNulBlob(fileSizeInBytes);
+        const filename = `output_${fileSizeInBytes}.img`;
+        downloadFile(blob, filename);
+    } else {
+        alert('put in a valid file size');
+    }
+}
+</script>
+</body>
+</html>
