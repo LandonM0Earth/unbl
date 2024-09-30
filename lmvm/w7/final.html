@@ -93,107 +93,80 @@
             { name: 'v86.wasm', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/v86.wasm' },
             { name: 'libv86.js', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/libv86.js' },
             { name: 'seabios.bin', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/seabios.bin' },
-            { name: 'vgabios.bin', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/vgabios.bin' }
+            { name: 'vgabios.bin', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/vgabios.bin' },
         ];
 
-        const progressFill = document.getElementById('progress-fill');
         const loadingText = document.getElementById('loading-text');
+        const progressFill = document.getElementById('progress-fill');
 
-        // IndexedDB helper functions
-        function openDB() {
+        async function openDB() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open('fileCache', 1);
-                
-                request.onupgradeneeded = function() {
-                    const db = request.result;
-                    if (!db.objectStoreNames.contains('files')) {
-                        db.createObjectStore('files');
-                    }
+                const request = indexedDB.open('MyDatabase', 1);
+                request.onerror = (event) => {
+                    reject('Database failed to open');
                 };
-                
-                request.onsuccess = function() {
-                    resolve(request.result);
+                request.onsuccess = (event) => {
+                    resolve(event.target.result);
                 };
-                
-                request.onerror = function() {
-                    reject('Failed to open IndexedDB');
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    db.createObjectStore('files', { keyPath: 'name' });
                 };
             });
         }
 
-        function saveToIndexedDB(db, fileName, data) {
+        async function saveToIndexedDB(db, name, data) {
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction(['files'], 'readwrite');
                 const store = transaction.objectStore('files');
-                store.put(data, fileName);
-                transaction.oncomplete = function() {
+                const request = store.put({ name, data });
+
+                request.onsuccess = () => {
                     resolve();
                 };
-                transaction.onerror = function() {
-                    reject('Error saving file to IndexedDB');
+                request.onerror = () => {
+                    reject('Error saving to database');
                 };
             });
         }
 
-        function loadFromIndexedDB(db, fileName) {
-            return new Promise((resolve, reject) => {
+        async function loadFromIndexedDB(db, name) {
+            return new Promise((resolve) => {
                 const transaction = db.transaction(['files'], 'readonly');
                 const store = transaction.objectStore('files');
-                const request = store.get(fileName);
-                
-                request.onsuccess = function() {
-                    if (request.result) {
-                        resolve(request.result);
+                const request = store.get(name);
+
+                request.onsuccess = (event) => {
+                    if (event.target.result) {
+                        resolve(event.target.result.data);
                     } else {
                         resolve(null);
                     }
-                };
-                request.onerror = function() {
-                    reject('Error loading file from IndexedDB');
                 };
             });
         }
 
         async function loadFile(file, index, db) {
-            return new Promise(async (resolve, reject) => {
-                let cachedData = await loadFromIndexedDB(db, file.name);
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('GET', file.url);
+                xhr.responseType = 'arraybuffer';
 
-                if (cachedData) {
-                    console.log(`${file.name} loaded from cache.`);
-                    resolve(cachedData);
-                } else {
-                    loadingText.innerText = `Loading ${file.name} [${index + 1}/7]`;
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('GET', file.url, true);
-                    xhr.responseType = 'blob';
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        const arrayBuffer = xhr.response;
+                        saveToIndexedDB(db, file.name, arrayBuffer);
+                        resolve(arrayBuffer);
+                    } else {
+                        reject(`Failed to load ${file.name}`);
+                    }
+                };
 
-                    xhr.onprogress = function (event) {
-                        if (event.lengthComputable) {
-                            const percentComplete = (event.loaded / event.total) * 100;
-                            progressFill.style.width = `${percentComplete}%`;
-                        }
-                    };
+                xhr.onerror = function () {
+                    reject(`Error loading ${file.name}`);
+                };
 
-                    xhr.onload = function () {
-                        if (xhr.status === 200) {
-                            const reader = new FileReader();
-                            reader.readAsArrayBuffer(xhr.response);
-                            reader.onloadend = async function () {
-                                const arrayBuffer = reader.result;
-                                await saveToIndexedDB(db, file.name, arrayBuffer);
-                                resolve(arrayBuffer);
-                            };
-                        } else {
-                            reject(`Failed to load ${file.name}`);
-                        }
-                    };
-
-                    xhr.onerror = function () {
-                        reject(`Error loading ${file.name}`);
-                    };
-
-                    xhr.send();
-                }
+                xhr.send();
             });
         }
 
@@ -226,7 +199,11 @@
                     // Load the libv86.js script when it is fetched
                     if (files[i].name === 'libv86.js') {
                         const script = document.createElement('script');
-                        script.src = loadedFiles[files[i].name];
+                        script.src = URL.createObjectURL(new Blob([data])); // Use Blob to create URL
+                        script.onload = () => {
+                            console.log("libv86.js loaded successfully.");
+                            startEmulator(loadedFiles, portions); // Start emulator after loading the script
+                        };
                         document.head.appendChild(script);
                     }
 
@@ -253,10 +230,13 @@
                 combinedFile = await combineFiles(portions, db);
             }
 
-            // Now that we have all files, we can call StartW7
+            // Remove loading screen only after all files are processed
             document.getElementById("loading-container").remove();
+        }
 
-            // All files loaded, call StartW7 with the loaded file references
+        // Separate function to start the emulator
+        function startEmulator(loadedFiles, portions) {
+            const combinedFile = loadedFiles['windows7.bin.zst'] || portions; // fallback to portions if combined file is not loaded
             StartW7(
                 loadedFiles['v86.wasm'],
                 loadedFiles['seabios.bin'],
@@ -267,6 +247,11 @@
         }
 
         function StartW7(wasm, bios, vga_bios, state) {
+            if (typeof V86 === "undefined") {
+                console.error("V86 is not defined. Please check if libv86.js is loaded correctly.");
+                return;
+            }
+
             const v86emulator = new V86({
                 wasm_path: wasm, // Use the loaded wasm file
                 bios: { url: bios }, // Use the loaded bios file
