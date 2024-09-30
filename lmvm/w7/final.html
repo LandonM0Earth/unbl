@@ -185,38 +185,81 @@
         }
 
         async function loadFilesSequentially() {
-            const db = await openDB(); // Open IndexedDB
-            const loadedFiles = {};
-            const portions = [];
+    const db = await openDB(); // Open IndexedDB
+    const loadedFiles = {};
+    const portions = [];
 
-            // Load the main files first
-            for (let i = 0; i < files.length; i++) {
-                try {
-                    const data = await loadFile(files[i], i, db);
-                    loadedFiles[files[i].name] = data; // Store the loaded file data
-                    progressFill.style.width = '0%'; // Reset for the next file
+    // Load the main files first
+    for (let i = 0; i < files.length; i++) {
+        try {
+            const data = await loadFile(files[i], i, db);
+            loadedFiles[files[i].name] = data; // Store the loaded file data
+            progressFill.style.width = '0%'; // Reset for the next file
 
-                    // Load the libv86.js script when it is fetched
-                    if (files[i].name === 'libv86.js') {
-                        const script = document.createElement('script');
-                        script.src = URL.createObjectURL(new Blob([data])); // Use Blob to create URL
-                        script.onload = () => {
-                            console.log("libv86.js loaded successfully.");
-                            startEmulator(loadedFiles, portions); // Start emulator after loading the script
-                        };
-                        document.head.appendChild(script);
-                    }
-
-                    // Store the portions for combining later
-                    if (files[i].name.startsWith('Windows 7 Portion')) {
-                        portions.push(data);
-                    }
-                } catch (error) {
-                    console.error(error);
-                    loadingText.innerText = error;
-                    return; // Stop loading if there's an error
-                }
+            // Load the libv86.js script when it is fetched
+            if (files[i].name === 'libv86.js') {
+                const script = document.createElement('script');
+                script.src = URL.createObjectURL(new Blob([data])); // Use a Blob for loading
+                script.onload = () => {
+                    // Once libv86.js is loaded, we can start the VM
+                    initializeVM(loadedFiles, portions);
+                };
+                document.head.appendChild(script);
             }
+
+            // Store the portions for combining later
+            if (files[i].name.startsWith('Windows 7 Portion')) {
+                portions.push(data);
+            }
+        } catch (error) {
+            console.error(error);
+            loadingText.innerText = error;
+            return; // Stop loading if there's an error
+        }
+    }
+
+    // Check if combined file exists in cache
+    const cachedCombinedFile = await loadFromIndexedDB(db, 'windows7.bin.zst');
+
+    let combinedFile;
+    if (cachedCombinedFile) {
+        console.log("Loaded combined file from cache.");
+        combinedFile = cachedCombinedFile;
+    } else {
+        console.log("Combining portions into windows7.bin.zst.");
+        combinedFile = await combineFiles(portions, db);
+    }
+    
+    // Now that we have all files, we can call StartW7
+    document.getElementById("loading-container").remove();
+
+    // Store the combined file to loadedFiles to be used later in StartW7
+    loadedFiles['windows7.bin.zst'] = combinedFile;
+
+    // All files loaded, call StartW7 with the loaded file references
+    StartW7(
+        loadedFiles['v86.wasm'],
+        loadedFiles['seabios.bin'],
+        loadedFiles['vgabios.bin'],
+        loadedFiles['windows7.bin.zst']
+    );
+    loadingText.innerText = 'All files loaded!';
+}
+
+function initializeVM(loadedFiles, portions) {
+    // Check if V86 is defined here
+    if (typeof V86 !== 'undefined') {
+        StartW7(
+            loadedFiles['v86.wasm'],
+            loadedFiles['seabios.bin'],
+            loadedFiles['vgabios.bin'],
+            loadedFiles['windows7.bin.zst']
+        );
+    } else {
+        console.error('V86 is not defined, please check if libv86.js is loaded correctly.');
+    }
+}
+
 
             // Check if combined file exists in cache
             const cachedCombinedFile = await loadFromIndexedDB(db, 'windows7.bin.zst');
