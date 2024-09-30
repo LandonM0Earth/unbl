@@ -196,15 +196,21 @@
             loadedFiles[files[i].name] = data; // Store the loaded file data
             progressFill.style.width = '0%'; // Reset for the next file
 
-            // Load the libv86.js script when it is fetched
+            // Check if the current file is libv86.js
             if (files[i].name === 'libv86.js') {
+                // Load the libv86.js script when it is fetched
                 const script = document.createElement('script');
-                script.src = URL.createObjectURL(new Blob([data])); // Use a Blob for loading
-                script.onload = () => {
-                    // Once libv86.js is loaded, we can start the VM
-                    initializeVM(loadedFiles, portions);
-                };
+                script.src = URL.createObjectURL(new Blob([data])); // Use Blob to create a URL
                 document.head.appendChild(script);
+                
+                // Wait until the script is loaded before proceeding
+                await new Promise((resolve) => {
+                    script.onload = resolve;
+                    script.onerror = () => {
+                        console.error("Failed to load libv86.js");
+                        reject();
+                    };
+                });
             }
 
             // Store the portions for combining later
@@ -229,19 +235,16 @@
         console.log("Combining portions into windows7.bin.zst.");
         combinedFile = await combineFiles(portions, db);
     }
-    
+
     // Now that we have all files, we can call StartW7
     document.getElementById("loading-container").remove();
-
-    // Store the combined file to loadedFiles to be used later in StartW7
-    loadedFiles['windows7.bin.zst'] = combinedFile;
 
     // All files loaded, call StartW7 with the loaded file references
     StartW7(
         loadedFiles['v86.wasm'],
         loadedFiles['seabios.bin'],
         loadedFiles['vgabios.bin'],
-        loadedFiles['windows7.bin.zst']
+        combinedFile
     );
     loadingText.innerText = 'All files loaded!';
 }
