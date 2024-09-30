@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Windows 7</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: black;
+            font-family: Arial, sans-serif;
+        }
+        #screen_container {
+            text-align: center;
+        }
+        #loading-container {
+            text-align: center;
+        }
+        #loading-text {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: white;
+        }
+        .progress-bar {
+            width: 150px;
+            height: 10px;
+            background-color: white;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background-color: rgb(0, 0, 255);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-container">
+        <div id="loading-text">Loading...</div>
+        <div class="progress-bar">
+            <div id="progress-fill" class="progress-fill"></div>
+        </div>
+    </div>
+
+    <div id="screen_container">
+        <div style="white-space: pre; font: 14px Consolas, monospace;"></div>
+        <canvas onclick="this.requestPointerLock();" style="display: none"></canvas>
+    </div>
+
+    <script>
+        function screen_go_fullscreen() {
+            const container = document.body;
+            if (container) {
+                const requestFullscreen = container.requestFullscreen || container.webkitRequestFullscreen || 
+                                          container.mozRequestFullScreen || container.msRequestFullscreen;
+                if (requestFullscreen) {
+                    requestFullscreen.call(container);
+                    try {
+                        navigator.keyboard.lock();
+                    } catch (e) {
+                        console.error("Keyboard lock not supported:", e);
+                    }
+                    const requestPointerLock = container.requestPointerLock || container.mozRequestPointerLock || container.webkitRequestPointerLock;
+                    if (requestPointerLock) {
+                        requestPointerLock.call(container);
+                    } else {
+                        console.error("Pointer lock not supported.");
+                    }
+                }
+            }
+        }
+
+        document.addEventListener("keydown", function(event) {
+            if (event.key === "f" || event.key === "F") {
+                screen_go_fullscreen();
+            }
+        });
+
+        const files = [
+            { name: 'Windows 7 Portion 1 of 3', url: 'https://cdn.glitch.me/fc8a6015-027f-4ec6-99ea-1d6f29e59bbf/win71.zst' },
+            { name: 'Windows 7 Portion 2 of 3', url: 'https://cdn.glitch.me/fc8a6015-027f-4ec6-99ea-1d6f29e59bbf/win72.zst' },
+            { name: 'Windows 7 Portion 3 of 3', url: 'https://cdn.glitch.me/fc8a6015-027f-4ec6-99ea-1d6f29e59bbf/win73.zst' },
+            { name: 'v86.wasm', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/v86.wasm' },
+            { name: 'libv86.js', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/libv86.js' },
+            { name: 'seabios.bin', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/seabios.bin' },
+            { name: 'vgabios.bin', url: 'https://landonm0earth.github.io/unbl/lmvm/w7/vgabios.bin' }
+        ];
+
+        const progressFill = document.getElementById('progress-fill');
+        const loadingText = document.getElementById('loading-text');
+
+        // IndexedDB helper functions
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('fileCache', 1);
+                request.onupgradeneeded = function() {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains('files')) {
+                        db.createObjectStore('files');
+                    }
+                };
+                request.onsuccess = function() {
+                    resolve(request.result);
+                };
+                request.onerror = function() {
+                    reject('Failed to open IndexedDB');
+                };
+            });
+        }
+
+        function saveToIndexedDB(db, fileName, data) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['files'], 'readwrite');
+                const store = transaction.objectStore('files');
+                store.put(data, fileName);
+                transaction.oncomplete = function() {
+                    resolve();
+                };
+                transaction.onerror = function() {
+                    reject('Error saving file to IndexedDB');
+                };
+            });
+        }
+
+        function loadFromIndexedDB(db, fileName) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['files'], 'readonly');
+                const store = transaction.objectStore('files');
+                const request = store.get(fileName);
+                request.onsuccess = function() {
+                    if (request.result) {
+                        resolve(request.result);
+                    } else {
+                        resolve(null);
+                    }
+                };
+                request.onerror = function() {
+                    reject('Error loading file from IndexedDB');
+                };
+            });
+        }
+
+        async function loadFile(file, index, db) {
+            return new Promise(async (resolve, reject) => {
+                let cachedData = await loadFromIndexedDB(db, file.name);
+                if (cachedData) {
+                    console.log(`${file.name} loaded from cache.`);
+                    resolve(cachedData);
+                } else {
+                    loadingText.innerText = `Loading ${file.name} [${index + 1}/7]`;
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('GET', file.url, true);
+                    xhr.responseType = 'blob';
+                    xhr.onprogress = function (event) {
+                        if (event.lengthComputable) {
+                            const percentComplete = (event.loaded / event.total) * 100;
+                            progressFill.style.width = `${percentComplete}%`;
+                        }
+                    };
+                    xhr.onload = function () {
+                        if (xhr.status === 200) {
+                            const reader = new FileReader();
+                            reader.readAsDataURL(xhr.response);
+                            reader.onloadend = async function () {
+                                let base64data = reader.result;
+                                await saveToIndexedDB(db, file.name, base64data);
+                                resolve(base64data);
+                            };
+                        } else {
+                            reject(`Failed to load ${file.name}`);
+                        }
+                    };
+                    xhr.onerror = function () {
+                        reject(`Error loading ${file.name}`);
+                    };
+                    xhr.send();
+                }
+            });
+        }
+
+        async function combinePortions(loadedFiles) {
+            // Combine the three portions into one Uint8Array
+            const buffers = [
+                new Uint8Array(await (await fetch(loadedFiles['Windows 7 Portion 1 of 3'])).arrayBuffer()),
+                new Uint8Array(await (await fetch(loadedFiles['Windows 7 Portion 2 of 3'])).arrayBuffer()),
+                new Uint8Array(await (await fetch(loadedFiles['Windows 7 Portion 3 of 3'])).arrayBuffer())
+            ];
+            const totalSize = buffers.reduce((sum, buffer) => sum + buffer.length, 0);
+            const combined = new Uint8Array(totalSize);
+
+            let offset = 0;
+            for (const buffer of buffers) {
+                combined.set(buffer, offset);
+                offset += buffer.length;
+            }
+
+            return combined;
+        }
+
+        async function loadFilesSequentially() {
+            const db = await openDB(); // Open IndexedDB
+            let cachedWindows7 = await loadFromIndexedDB(db, 'windows7.bin.zst');
+
+            if (cachedWindows7) {
+                console.log('windows7.bin.zst loaded from cache.');
+                return StartW7(
+                    loadedFiles['v86.wasm'],
+                    loadedFiles['seabios.bin'],
+                    loadedFiles['vgabios.bin'],
+                    cachedWindows7
+                );
+            }
+
+            const loadedFiles = {};
+            for (let i = 0; i < files.length; i++) {
+                try {
+                    const data = await loadFile(files[i], i, db);
+                    loadedFiles[files[i].name] = data; // Store the loaded file data
+                    progressFill.style.width = '0%'; // Reset for the next file
+
+                    // Load the libv86.js script when it is fetched
+                    if (files[i].name === 'libv86.js') {
+                        const script = document.createElement('script');
+                        script.src = loadedFiles[files[i].name];
+                        document.head.appendChild(script);
+                    }
+                } catch (error) {
+                    console.error(error);
+                    loadingText.innerText = error;
+                    break;
+                }
+            }
+
+            document.getElementById("loading-container").remove();
+
+            // Combine the portions and cache the result
+            const combinedWindows7 = await combinePortions(loadedFiles);
+            await saveToIndexedDB(db, 'windows7.bin.zst', combinedWindows7);
+            console.log('windows7.bin.zst combined and saved to cache.');
+
+            StartW7(
+                loadedFiles['v86.wasm'],
+                loadedFiles['seabios.bin'],
+                loadedFiles['vgabios.bin'],
+                combinedWindows7
+            );
+        }
+
+        function StartW7(wasm, bios, vga_bios, state) {
+            const v86emulator = new V86({
+                wasm_path: wasm, // Use the loaded wasm file
+                bios: { url: bios }, // Use the loaded bios file
+                vga_bios: { url: vga_bios }, // Use the loaded VGA bios file
+                memory_size: 512 * 1024 * 1024,
+                vga_memory_size: 64 * 1024 * 1024,
+                screen_container: document.getElementById("screen_container"),
+                autostart: true,
+                acpi: true,
+            });
+
+            v86emulator.add_listener("emulator-started", () => {
+                async function restoreState() {
+                    try {
+                        const response = await fetch(state); // Use the loaded Windows 7 state file
+                        const arrayBuffer = await response.arrayBuffer();
+                        v86emulator.restore_state(arrayBuffer);
+                    } catch (error) {
+                        console.error("Error restoring state:", error);
+                    }
+                }
+                restoreState();
+            });
+        }
+
+        // Start loading files
+        loadFilesSequentially();
+    </script>
+</body>
+</html>
